@@ -1,8 +1,0 @@
-<RCC>
-    <qresource prefix="/imagen">
-        <file>Space.png</file>
-        <file>voyager.png</file>
-        <file>spriteMe.png</file>
-        <file>luna.png</file>
-    </qresource>
-</RCC>
