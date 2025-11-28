@@ -1,0 +1,14 @@
+<RCC>
+    <qresource prefix="/new/imagen">
+        <file>images/corazon.png</file>
+        <file>images/luna.png</file>
+        <file>images/Space.png</file>
+        <file>images/spriteMe.png</file>
+        <file>images/voyager.png</file>
+        <file>images/portadaVoyager.png</file>
+        <file>images/gema.png</file>
+        <file>images/nivel2.png</file>
+        <file>images/nivel1.png</file>
+        <file>images/gameover.png</file>
+    </qresource>
+</RCC>
