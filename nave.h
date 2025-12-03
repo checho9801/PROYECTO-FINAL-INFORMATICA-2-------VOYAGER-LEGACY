@@ -45,6 +45,8 @@ signals:
      */
     void vidasCambiadas(int vidasRestantes);
 
+    void colisionConMeteorito();
+
     /**
      * @brief Señal emitida cuando la nave es destruida
      */

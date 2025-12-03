@@ -5,6 +5,7 @@
 #include <QGraphicsScene>
 #include <QTimer>
 #include "nave.h"
+#include "collisionmanager.h"
 
 /**
  * @brief Clase base abstracta para todos los niveles
@@ -15,7 +16,12 @@ class NivelBase : public QObject
 {
     Q_OBJECT
 
+private:
+    CollisionManager *collisionManager;
+
 public:
+
+    QGraphicsScene *scene;  ///< Escena gráfica del nivel
     /**
      * @brief Constructor de la clase base
      * @param escena Escena gráfica donde se dibuja el nivel
@@ -70,6 +76,8 @@ public:
      */
     Nave* getNave() const { return nave; }
 
+    CollisionManager* getCollisionManager() const { return collisionManager; }
+
 signals:
     /**
      * @brief Se emite cuando el nivel es completado
@@ -82,7 +90,7 @@ signals:
     void nivelFallado();
 
 protected:
-    QGraphicsScene *scene;  ///< Escena gráfica del nivel
+
     Nave *nave;             ///< Nave del jugador
     bool pausado;           ///< Estado de pausa
     bool completado;        ///< Nivel completado

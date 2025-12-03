@@ -5,7 +5,6 @@
 #include "gamemanager.h"
 #include "nivelmanager.h"
 #include "nivel2.h"
-#include "nivel1.h"
 #include <QMainWindow>
 #include <QGraphicsScene>
 #include <QTimer>
@@ -13,6 +12,7 @@
 #include <QPushButton>
 #include <QGraphicsPixmapItem>
 #include <QGraphicsTextItem>
+#include <QSoundEffect>  // NUEVO: Para el audio
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -52,9 +52,13 @@ private slots:
     void mostrarPantallaVictoria(NivelManager::NivelID nivelCompletado);
     void mostrarPantallaGameOver();
 
-    // Pantallas de transición
+    // Pantallas de transición (NUEVOS)
     void mostrarIntroNivel(NivelManager::NivelID nivelID);
     void iniciarNivelDespuesDeIntro(NivelManager::NivelID nivelID);
+
+    // Slots de audio (NUEVOS)
+    void playColisionSound();
+    void playGemaSound();
 
 private:
     // UI generada desde el archivo .ui
@@ -74,20 +78,38 @@ private:
     QPixmap fondoEscalado;
     int desplazamientoY;
     int velocidadFondo;
-    QTimer *timerFondo;    //< Timer para scroll del fondo
-    QTimer *timerTransicion;  //timmer para transiciones
+    QTimer *timerFondo;             ///< Timer para scroll del fondo
+    QTimer *timerTransicion;        ///< Timer para transiciones entre pantallas
+    QTimer *timerGameOver;         ///< Timer para el retardo de 5 segundos antes de cerrar la app
 
     // Elementos del menú
     QPushButton *btnComenzar;
     QPushButton *btnOpciones;
-    QPushButton *btnContinuar;
+
+    // Sistema de audio (NUEVO)
+    QSoundEffect *musicaMenu;
+    QSoundEffect *musicaNivel1;
+    QSoundEffect *musicaNivel2;
+    QSoundEffect *sfxColision;
+    QSoundEffect *sfxGema;
+    QSoundEffect *sfxVictoria;
+    QSoundEffect *sfxGameOver;
 
     // Métodos de inicialización
     void inicializarEscena();
     void inicializarFondo();
     void inicializarHUD();
     void inicializarManagers();
+    void inicializarSonidos();  // NUEVO
     void setupMenu();
+
+    // Control de audio (NUEVO)
+    void stopAllMusic();
+    void playMusicaMenu();
+    void playMusicaNivel1();
+    void playMusicaNivel2();
+    void playVictorySound();
+    void playGameOverSound();
 
     // Control de visibilidad
     void mostrarElementosJuego(bool mostrar);

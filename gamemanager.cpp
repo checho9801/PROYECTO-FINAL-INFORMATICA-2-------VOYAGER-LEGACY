@@ -51,8 +51,7 @@ void GameManager::terminarJuego()
 {
     qDebug() << "Game Over - Puntuación final:" << puntuacion;
     timerTiempo->stop();
-    cambiarEstado(GameOver);
-}
+    cambiarEstado(GameOver);}
 
 void GameManager::ganarJuego()
 {

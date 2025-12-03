@@ -32,6 +32,15 @@ void Nivel2::iniciar()
     // Inicializar nave
     inicializarNave();
 
+    // CONECTAR señal de nave destruida directamente
+    if (nave) {
+        connect(nave, &Nave::naveDestruida, this, [this]() {
+            qDebug() << "Nivel 2: Nave destruida - Emitiendo nivelFallado";
+            detener(); // Detener todos los timers
+            emit nivelFallado();
+        });
+    }
+
     // Inicializar HUD
     inicializarHUD();
 

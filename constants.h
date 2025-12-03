@@ -20,6 +20,7 @@ constexpr int METEORITO_MOVE_MS = 50;       // Actualizar posicion cada 50ms
 constexpr int ACCELERATION_MS = 7000;       // Acelerar spawn cada 7 segundos
 constexpr int GOAL_TIME_MS = 60000;         // Meta a los 60 segundos
 constexpr int TIEMPO_INTRO_NIVEL = 3000;
+constexpr int TIEMPO_PANTALLA_VICTORIA = 3000;
 
 // --- DIFFICULTY/SPAWN LIMITS ---
 constexpr int METEORITO_SPAWN_MIN = 900;    // Intervalo minimo
@@ -50,6 +51,17 @@ constexpr const char* GEMA = ":/new/imagen/images/gema.png";
 constexpr const char* NIVEL1_INTRO = ":/new/imagen/images/nivel1.png";
 constexpr const char* NIVEL2_INTRO = ":/new/imagen/images/nivel2.png";
 constexpr const char* GAME_OVER = ":/new/imagen/images/gameover.png";
+
+//SONIDOS
+
+constexpr const char* MUSICA_MENU = ":/new/audios/sounds/menu.mp3";
+constexpr const char* MUSICA_NIVEL1 = ":/new/audios/sounds/nivel1.mp3";
+constexpr const char* MUSICA_NIVEL2 = ":/new/audios/sounds/nivel2.mp3";
+
+constexpr const char* SFX_COLISION = ":/new/audios/sounds/colision.wav";
+constexpr const char* SFX_GEMA = ":/new/audios/sounds/gema.wav";
+constexpr const char* SFX_VICTORIA = ":/new/audios/sounds/victoria.wav";
+constexpr const char* SFX_GAMEOVER = ":/new/audios/sounds/gameover.wav";
 }
 
 // Nivel 2 - Constantes
@@ -59,7 +71,7 @@ constexpr int GEMA_PUNTOS = 10;                 // Puntos por gema
 
 
 // Tamaño del HUD
-constexpr int CORAZON_SIZE = 40;            // Tamano de cada corazon
+constexpr int CORAZON_SIZE = 20;            // Tamano de cada corazon
 constexpr int CORAZON_SPACING = 5;         // Espacio entre corazones
 constexpr int HUD_MARGIN_X = 20;            // Margen izquierdo
 constexpr int HUD_MARGIN_Y = 20;

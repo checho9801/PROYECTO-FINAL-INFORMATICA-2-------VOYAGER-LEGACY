@@ -11,4 +11,13 @@
         <file>images/nivel1.png</file>
         <file>images/gameover.png</file>
     </qresource>
+    <qresource prefix="/new/audios">
+        <file>sounds/gema.wav</file>
+        <file>sounds/victoria.wav</file>
+        <file>sounds/colision.wav</file>
+        <file>sounds/gameover.wav</file>
+        <file>sounds/menu.mp3</file>
+        <file>sounds/nivel1.mp3</file>
+        <file>sounds/nivel2.mp3</file>
+    </qresource>
 </RCC>

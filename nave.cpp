@@ -28,6 +28,7 @@ void Nave::restarVida()
 {
     if (vidas > 0) {
         vidas--;
+        emit colisionConMeteorito();
         emit vidasCambiadas(vidas);
 
         if (vidas <= 0) {

@@ -1,16 +1,19 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
-#include "nivelmanager.h"
 #include "constants.h"
-#include "nave.h"
-#include "nivel2.h" // Necesario para dynamic_cast en onNivelCargado
+#include "meteorito.h"
+#include "gema.h"
+#include "collisionmanager.h"
+#include "nivelbase.h"
 #include <QBrush>
 #include <QTransform>
 #include <QMessageBox>
 #include <QDebug>
-#include <QGraphicsPixmapItem> // Necesario para mostrar la luna/imagen de victoria
 #include <QLabel>
-#include <QApplication> // Necesario para qApp->quit()
+#include <QUrl>
+#include <QFile>
+#include <QFileInfo>
+#include <QDir>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),
@@ -18,7 +21,13 @@ MainWindow::MainWindow(QWidget *parent)
     desplazamientoY(0),
     velocidadFondo(GameConstants::BACKGROUND_SPEED),
     textoVidas(nullptr),
-    btnContinuar(nullptr) // Inicializar el nuevo botón
+    musicaMenu(nullptr),
+    musicaNivel1(nullptr),
+    musicaNivel2(nullptr),
+    sfxColision(nullptr),
+    sfxGema(nullptr),
+    sfxVictoria(nullptr),
+    sfxGameOver(nullptr)
 {
     ui->setupUi(this);
 
@@ -30,7 +39,10 @@ MainWindow::MainWindow(QWidget *parent)
     inicializarFondo();
     inicializarHUD();
     inicializarManagers();
+    inicializarSonidos();
     setupMenu();
+
+    timerGameOver = nullptr;
 
     // Conectar señales del GameManager
     connect(gameManager, &GameManager::estadoCambiado, this, &MainWindow::manejarEstadoJuego);
@@ -56,6 +68,15 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
+    // Limpiar objetos de audio
+    delete musicaMenu;
+    delete musicaNivel1;
+    delete musicaNivel2;
+    delete sfxColision;
+    delete sfxGema;
+    delete sfxVictoria;
+    delete sfxGameOver;
+
     delete ui;
 }
 
@@ -158,38 +179,194 @@ void MainWindow::inicializarManagers()
     nivelManager = new NivelManager(scene, this);
 }
 
+// ============== SISTEMA DE AUDIO ==============
+
+void MainWindow::inicializarSonidos()
+{
+    qDebug() << "Inicializando sistema de audio...";
+
+    // Lambda para copiar recurso a archivo temporal
+    auto copyResourceToTemp = [](const char* qrcPath) -> QString {
+        QFile resourceFile(qrcPath);
+        if (!resourceFile.open(QIODevice::ReadOnly)) {
+            qWarning() << "No se pudo abrir recurso:" << qrcPath;
+            return QString();
+        }
+
+        // Crear archivo temporal
+        QString fileName = QFileInfo(qrcPath).fileName();
+        QString tempPath = QDir::temp().filePath(fileName);
+
+        QFile tempFile(tempPath);
+        if (tempFile.exists()) {
+            tempFile.remove(); // Eliminar si ya existe
+        }
+
+        if (!tempFile.open(QIODevice::WriteOnly)) {
+            qWarning() << "No se pudo crear archivo temporal:" << tempPath;
+            return QString();
+        }
+
+        // Copiar datos
+        tempFile.write(resourceFile.readAll());
+        tempFile.close();
+        resourceFile.close();
+
+        qDebug() << "Copiado a:" << tempPath;
+        return tempPath;
+    };
+
+    // Lambda para inicializar música (loop infinito)
+    auto initMusic = [this, &copyResourceToTemp](QSoundEffect*& effect, const char* resourcePath) {
+        QString tempPath = copyResourceToTemp(resourcePath);
+        if (tempPath.isEmpty()) {
+            qWarning() << "ERROR: No se pudo copiar música:" << resourcePath;
+            return;
+        }
+
+        effect = new QSoundEffect(this);
+        effect->setSource(QUrl::fromLocalFile(tempPath));
+        effect->setLoopCount(QSoundEffect::Infinite);
+        effect->setVolume(0.3f);
+
+        if (effect->status() == QSoundEffect::Error) {
+            qWarning() << "ERROR: No se pudo cargar música:" << resourcePath;
+        } else {
+            qDebug() << "Música cargada:" << resourcePath;
+        }
+    };
+
+    // Inicializar música
+    initMusic(musicaMenu, GameConstants::Resources::MUSICA_MENU);
+    initMusic(musicaNivel1, GameConstants::Resources::MUSICA_NIVEL1);
+    initMusic(musicaNivel2, GameConstants::Resources::MUSICA_NIVEL2);
+
+    // Lambda para inicializar efectos de sonido
+    auto initSfx = [this, &copyResourceToTemp](QSoundEffect*& effect, const char* resourcePath) {
+        QString tempPath = copyResourceToTemp(resourcePath);
+        if (tempPath.isEmpty()) {
+            qWarning() << "ERROR: No se pudo copiar SFX:" << resourcePath;
+            return;
+        }
+
+        effect = new QSoundEffect(this);
+        effect->setSource(QUrl::fromLocalFile(tempPath));
+        effect->setVolume(0.7f);
+
+        if (effect->status() == QSoundEffect::Error) {
+            qWarning() << "ERROR: No se pudo cargar SFX:" << resourcePath;
+        } else {
+            qDebug() << "SFX cargado:" << resourcePath;
+        }
+    };
+
+    // Inicializar efectos de sonido
+    initSfx(sfxColision, GameConstants::Resources::SFX_COLISION);
+    initSfx(sfxGema, GameConstants::Resources::SFX_GEMA);
+    initSfx(sfxVictoria, GameConstants::Resources::SFX_VICTORIA);
+    initSfx(sfxGameOver, GameConstants::Resources::SFX_GAMEOVER);
+
+    qDebug() << "Sistema de audio inicializado";
+}
+
+void MainWindow::stopAllMusic()
+{
+    if (musicaMenu && musicaMenu->isPlaying()) musicaMenu->stop();
+    if (musicaNivel1 && musicaNivel1->isPlaying()) musicaNivel1->stop();
+    if (musicaNivel2 && musicaNivel2->isPlaying()) musicaNivel2->stop();
+}
+
+void MainWindow::playMusicaMenu()
+{
+    stopAllMusic();
+    if (musicaMenu && musicaMenu->status() == QSoundEffect::Ready) {
+        musicaMenu->play();
+        qDebug() << "Reproduciendo música del menú";
+    }
+}
+
+void MainWindow::playMusicaNivel1()
+{
+    stopAllMusic();
+    if (musicaNivel1 && musicaNivel1->status() == QSoundEffect::Ready) {
+        musicaNivel1->play();
+        qDebug() << "Reproduciendo música del Nivel 1";
+    }
+}
+
+void MainWindow::playMusicaNivel2()
+{
+    stopAllMusic();
+    if (musicaNivel2 && musicaNivel2->status() == QSoundEffect::Ready) {
+        musicaNivel2->play();
+        qDebug() << "Reproduciendo música del Nivel 2";
+    }
+}
+
+void MainWindow::playColisionSound()
+{
+    if (sfxColision && sfxColision->status() == QSoundEffect::Ready) {
+        sfxColision->play();
+    }
+}
+
+void MainWindow::playGemaSound()
+{
+    if (sfxGema && sfxGema->status() == QSoundEffect::Ready) {
+        sfxGema->play();
+    }
+}
+
+void MainWindow::playVictorySound()
+{
+    stopAllMusic();
+    if (sfxVictoria && sfxVictoria->status() == QSoundEffect::Ready) {
+        sfxVictoria->play();
+        qDebug() << "Reproduciendo sonido de victoria";
+    }
+}
+
+void MainWindow::playGameOverSound()
+{
+    stopAllMusic();
+    if (sfxGameOver && sfxGameOver->status() == QSoundEffect::Ready) {
+        sfxGameOver->play();
+        qDebug() << "Reproduciendo sonido de Game Over";
+    }
+}
+
+// ============== FIN SISTEMA DE AUDIO ==============
+
 void MainWindow::setupMenu()
 {
-    // Estilo común para botones
-    const QString buttonStyle =
+    // Crear botón "Comenzar el juego"
+    btnComenzar = new QPushButton("Comenzar el juego", this);
+    btnComenzar->setFont(QFont("Arial", 20, QFont::Bold));
+    btnComenzar->setStyleSheet(
         "QPushButton { background-color: rgba(60, 99, 130, 200); color: white; "
         "border: 2px solid #63B8FF; border-radius: 10px; padding: 10px 20px; }"
-        "QPushButton:hover { background-color: rgba(74, 122, 159, 230); }";
+        "QPushButton:hover { background-color: rgba(74, 122, 159, 230); }"
+        );
 
+    // Crear botón "Opciones"
+    btnOpciones = new QPushButton("Opciones", this);
+    btnOpciones->setFont(QFont("Arial", 20, QFont::Bold));
+    btnOpciones->setStyleSheet(
+        "QPushButton { background-color: rgba(60, 99, 130, 200); color: white; "
+        "border: 2px solid #63B8FF; border-radius: 10px; padding: 10px 20px; }"
+        "QPushButton:hover { background-color: rgba(74, 122, 159, 230); }"
+        );
+
+    // Posicionar botones
     int btnWidth = 300;
     int btnHeight = 60;
     int centerX = (GameConstants::SCENE_WIDTH - btnWidth) / 2;
     int startY = GameConstants::SCENE_HEIGHT / 2 - 50;
 
-    // Crear botón "Comenzar el juego" (usado también para reiniciar)
-    btnComenzar = new QPushButton("Comenzar el juego", this);
-    btnComenzar->setFont(QFont("Arial", 20, QFont::Bold));
-    btnComenzar->setStyleSheet(buttonStyle);
     btnComenzar->setGeometry(centerX, startY, btnWidth, btnHeight);
-
-    // Crear botón "Opciones"
-    btnOpciones = new QPushButton("Opciones", this);
-    btnOpciones->setFont(QFont("Arial", 20, QFont::Bold));
-    btnOpciones->setStyleSheet(buttonStyle);
     btnOpciones->setGeometry(centerX, startY + btnHeight + 20, btnWidth, btnHeight);
 
-    // ** BOTÓN DE CONTINUAR**
-    btnContinuar = new QPushButton("Continuar", this);
-    btnContinuar->setFont(QFont("Arial", 20, QFont::Bold));
-    btnContinuar->setStyleSheet(buttonStyle);
-    btnContinuar->setGeometry(centerX, startY + GameConstants::SCENE_HEIGHT/4, btnWidth, btnHeight);
-
-    // Conectar botón al inicio del juego (conexión base para el menú)
+    // Conectar botón al inicio del juego
     connect(btnComenzar, &QPushButton::clicked, [this]() {
         gameManager->iniciarJuego();
         mostrarIntroNivel(NivelManager::Nivel1);
@@ -197,117 +374,160 @@ void MainWindow::setupMenu()
 
     btnComenzar->hide();
     btnOpciones->hide();
-    btnContinuar->hide(); // Ocultar por defecto
 }
 
 void MainWindow::manejarEstadoJuego(GameManager::GameState nuevoEstado)
 {
+    bool isMenu = (nuevoEstado == GameManager::Menu);
+    bool isPlaying = (nuevoEstado == GameManager::Playing);
+    bool isGameOver = (nuevoEstado == GameManager::GameOver);
+
+    NivelBase *nivelActual = nivelManager->getNivelActual();
+
+    // **Ajuste para corregir el error:** Determinar la escena correcta a usar.
+    // Dado que 'NivelBase' no tiene 'getScene()', usaremos la escena principal de MainWindow (scene).
+    QGraphicsScene *targetScene = scene;
+
     qDebug() << "Estado del juego cambió a:" << nuevoEstado;
 
-    // Ocultar todos los botones por defecto, se muestran solo si corresponde
-    btnComenzar->hide();
-    btnOpciones->hide();
-    btnContinuar->hide();
-    mostrarElementosJuego(false);
-
-    // Deshabilitar la nave por defecto (se habilita solo en Playing)
-    if (nivelManager->getNivelActual() && nivelManager->getNivelActual()->getNave()) {
-        nivelManager->getNivelActual()->getNave()->setEnabled(false);
-        nivelManager->getNivelActual()->getNave()->clearFocus();
-    }
-
-    // Restaurar el fondo scrolleable para todos los estados que no sean menú/gameover
-    if (nuevoEstado == GameManager::Playing || nuevoEstado == GameManager::Paused) {
-        if (!timerFondo->isActive()) {
-            timerFondo->start(GameConstants::FRAME_UPDATE_MS);
-        }
+    // Control del fondo scrolleable
+    if (isPlaying) {
+        timerFondo->start(GameConstants::FRAME_UPDATE_MS);
         QBrush brush(fondoEscalado);
         brush.setTransform(QTransform::fromTranslate(0, desplazamientoY));
-        scene->setBackgroundBrush(brush);
+        targetScene->setBackgroundBrush(brush); // Usamos targetScene
     } else {
         timerFondo->stop();
     }
 
-    // --- LÓGICA POR ESTADO ---
-    switch (nuevoEstado) {
-        case GameManager::Menu:
-            // Fondo del menú
-            {
-                QPixmap portada(GameConstants::Resources::MENU_BACKGROUND);
-                // ... (lógica de escalado de portada, ya estaba en tu código)
-                if (portada.isNull()) {
-                    portada = QPixmap(GameConstants::SCENE_WIDTH, GameConstants::SCENE_HEIGHT);
-                    portada.fill(Qt::darkBlue);
-                } else {
-                    portada = portada.scaled(GameConstants::SCENE_WIDTH, GameConstants::SCENE_HEIGHT, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-                }
-                QBrush brush(portada);
-                scene->setBackgroundBrush(brush);
-            }
-            limpiarEscena(); // Limpiar elementos temporales de otras pantallas
-            btnComenzar->setText("Comenzar el juego");
-            btnComenzar->show();
-            btnOpciones->show();
-            break;
+    // Visibilidad del menú
+    btnComenzar->setVisible(isMenu);
+    btnOpciones->setVisible(isMenu);
 
-        case GameManager::Playing:
-            // Visibilidad del HUD y habilitar la nave
-            mostrarElementosJuego(true);
-            if (nivelManager->getNivelActual() && nivelManager->getNivelActual()->getNave()) {
-                nivelManager->getNivelActual()->getNave()->setEnabled(true);
-                nivelManager->getNivelActual()->getNave()->setFocus(); // Para que responda a teclas
-            }
-            break;
+    // Visibilidad del HUD
+    mostrarElementosJuego(isPlaying);
 
-        case GameManager::Paused:
-            // Mostrar elementos de pausa (no implementado aún, pero detiene el fondo)
-            break;
+    // Fondo del menú
+    if (isMenu) {
+        QPixmap portada(GameConstants::Resources::MENU_BACKGROUND);
+        if (portada.isNull()) {
+            qDebug() << "ERROR: No se pudo cargar MENU_BACKGROUND";
+            portada = QPixmap(GameConstants::SCENE_WIDTH, GameConstants::SCENE_HEIGHT);
+            portada.fill(Qt::darkBlue);
+        } else {
+            portada = portada.scaled(
+                GameConstants::SCENE_WIDTH,
+                GameConstants::SCENE_HEIGHT,
+                Qt::IgnoreAspectRatio,
+                Qt::SmoothTransformation
+                );
+        }
 
-        case GameManager::GameOver:
-            qDebug() << "MainWindow: Entrando en estado GAME OVER.";
-            // Limpiar escena y mostrar pantalla de Game Over
-            mostrarElementosJuego(false);
-            mostrarPantallaGameOver();
+        QBrush brush(portada);
+        targetScene->setBackgroundBrush(brush); // Usamos targetScene
+        limpiarEscena();
 
-            // Re-conectar el botón 'Comenzar' para que ahora reinicie
-            disconnect(btnComenzar, nullptr, nullptr, nullptr);
-            connect(btnComenzar, &QPushButton::clicked, [this]() {
-                btnComenzar->hide();
-                gameManager->reiniciarJuego(); // Llama a iniciarJuego()
-                mostrarIntroNivel(NivelManager::Nivel1); // Carga la intro del primer nivel
-            });
-            btnComenzar->setText("Reiniciar Juego");
-            btnComenzar->show();
-            break;
-
-        case GameManager::Victory:
-            // El estado de Victory se gestiona en onNivelCompletado, pero es bueno tenerlo aquí
-            // para limpiar el foco de la nave.
-            break;
+        // Reproducir música del menú
+        playMusicaMenu();
+    } else {
+        // Detener música cuando no estamos en el menú
+        // (la música de niveles se inicia en onNivelCargado)
+        if (!isPlaying) {
+            stopAllMusic();
+        }
     }
 
-    scene->update();
+    // Manejar estado de Game Over
+    if (isGameOver) {
+        qDebug() << "Estado Game Over: deteniendo todo y mostrando pantalla final.";
+
+        // 1. Detener todos los timers relevantes del juego
+        timerFondo->stop();
+        // ** (Añade aquí la detención de otros timers si los hay, p.ej., timerGeneradorEnemigos->stop()) **
+
+        // 2. Detener música
+        stopAllMusic();
+
+        // 3. Ocultar HUD
+        mostrarElementosJuego(false);
+
+        // 4. Mostrar la imagen GAME_OVER como fondo
+        QPixmap gameOverImage(GameConstants::Resources::GAME_OVER);
+        if (gameOverImage.isNull()) {
+            qDebug() << "ERROR: No se pudo cargar GAME_OVER. Usando fondo rojo.";
+            gameOverImage = QPixmap(GameConstants::SCENE_WIDTH, GameConstants::SCENE_HEIGHT);
+            gameOverImage.fill(Qt::red);
+        } else {
+            // Escalar la imagen para que cubra la escena
+            gameOverImage = gameOverImage.scaled(
+                GameConstants::SCENE_WIDTH,
+                GameConstants::SCENE_HEIGHT,
+                Qt::IgnoreAspectRatio,
+                Qt::SmoothTransformation
+                );
+        }
+
+        QBrush gameOverBrush(gameOverImage);
+
+        // Usamos targetScene (que ahora es MainWindow::scene)
+        targetScene->setBackgroundBrush(gameOverBrush);
+
+        // 5. Configurar e iniciar el temporizador de cierre (5 segundos = 5000 ms)
+        if (!timerGameOver) {
+            // Inicializar el timer si es la primera vez (asumiendo que es un puntero a QTimer* de MainWindow)
+            timerGameOver = new QTimer(this);
+
+            // **ESTA CONEXIÓN ES LA CORRECTA PARA CERRAR LA APP:**
+            connect(timerGameOver, &QTimer::timeout, QCoreApplication::instance(), &QCoreApplication::quit);
+        }
+
+        // Iniciar el temporizador para que se dispare una vez después de 5 segundos.
+        timerGameOver->setSingleShot(true);
+        timerGameOver->start(5000);
+
+    }
+
+    // Actualizamos la escena que esté activa
+    targetScene->update();
 }
 
 void MainWindow::onNivelCargado(NivelManager::NivelID nivelID)
 {
     qDebug() << "MainWindow: Nivel" << nivelID << "cargado";
-    // Corregido: Usar %1 para mostrar el ID
     setWindowTitle(QString("Voyager Legacy - Nivel %1").arg(nivelID));
 
-    // Si es el Nivel 2, configurar el label de gemas
-    if (nivelID == NivelManager::Nivel2) {
-        // Debemos asegurarnos de que el Label de gemas se muestre
+    // Reproducir música del nivel correspondiente
+    if (nivelID == NivelManager::Nivel1) {
+        playMusicaNivel1();
+    } else if (nivelID == NivelManager::Nivel2) {
+        playMusicaNivel2();
+
+        // Si es el Nivel 2, configurar el label de gemas
         Nivel2 *nivel2 = dynamic_cast<Nivel2*>(nivelManager->getNivelActual());
         if (nivel2 && nivel2->getLabelGemas()) {
             QLabel *labelGemas = nivel2->getLabelGemas();
-            labelGemas->setParent(ui->graphicsView); // Asignar al widget padre correcto
-            labelGemas->move(GameConstants::SCENE_WIDTH - labelGemas->width() - GameConstants::HUD_MARGIN_X, GameConstants::HUD_MARGIN_Y);
+            labelGemas->setParent(this);
+            labelGemas->move(GameConstants::SCENE_WIDTH - 200, GameConstants::HUD_MARGIN_Y);
             labelGemas->show();
         }
-    } else {
-        // Asegurar que cualquier label de nivel anterior (como el de gemas) esté oculto
-        // Se asume que el labelGemas está en el nivel y se limpia con el nivel.
+    }
+
+    // Conectar sonidos de colisiones y gemas
+    NivelBase *nivelActual = nivelManager->getNivelActual();
+    if (!nivelActual) return;
+
+    // Conectar sonido de colisión con la nave
+       if (nivelActual && nivelActual->getNave()) {
+        Nave *nave = nivelActual->getNave();
+        connect(nave, &Nave::colisionConMeteorito, this, &MainWindow::playColisionSound, Qt::UniqueConnection);
+    }
+
+    // Para el Nivel 2, conectar sonido de gemas
+    if (nivelID == NivelManager::Nivel2) {
+        Nivel2 *nivel2 = dynamic_cast<Nivel2*>(nivelActual);
+        if (nivel2) {
+            connect(nivel2, &Nivel2::gemaRecolectadaSignal, this, &MainWindow::playGemaSound, Qt::UniqueConnection);
+        }
     }
 }
 
@@ -315,23 +535,32 @@ void MainWindow::onNivelCompletado(NivelManager::NivelID nivelCompletado)
 {
     qDebug() << "MainWindow: Nivel" << nivelCompletado << "completado";
 
-    // Detener el nivel actual (aunque lo hace el manager, por si acaso)
-    nivelManager->pausarNivel();
-    timerFondo->stop();
-    mostrarElementosJuego(false);
+    // Reproducir sonido de victoria
+    playVictorySound();
 
     mostrarPantallaVictoria(nivelCompletado);
 }
 
 void MainWindow::onNivelFallado(NivelManager::NivelID nivelID)
 {
-    qDebug() << "MainWindow: Nivel" << nivelID << "fallado. Terminando juego...";
+    qDebug() << "MainWindow: Nivel" << nivelID << "fallado - Activando Game Over";
 
-    // 1. Notificar al GameManager que el juego terminó.
-    gameManager->terminarJuego(); // Esto cambia el estado a GameOver
+    // Detener el nivel completamente
+    nivelManager->pausarNivel();
 
-    // La lógica de detener la nave, ocultar HUD y mostrar pantalla se gestiona en
-    // manejarEstadoJuego(GameOver)
+    // Deshabilitar la nave para que no se pueda mover
+    NivelBase *nivelActual = nivelManager->getNivelActual();
+    if (nivelActual && nivelActual->getNave()) {
+        Nave *nave = nivelActual->getNave();
+        nave->setEnabled(false);
+        nave->clearFocus();
+    }
+
+    // Cambiar el estado del juego a Game Over
+    gameManager->terminarJuego();
+
+    // Mostrar pantalla de Game Over
+    mostrarPantallaGameOver();
 }
 
 void MainWindow::onTodosLosNivelesCompletados()
@@ -348,188 +577,6 @@ void MainWindow::onTodosLosNivelesCompletados()
     qApp->quit();
 }
 
-void MainWindow::mostrarPantallaVictoria(NivelManager::NivelID nivelCompletado)
-{
-    QString titulo;
-    QPixmap imagenVictoria;
-
-    // --- 1. CONFIGURACIÓN DE PANTALLA DE VICTORIA ---
-
-    if (nivelCompletado == NivelManager::Nivel1) {
-        titulo = "¡Nivel 1 Completado!";
-        qDebug() << "Cargando imagen de la Luna";
-        imagenVictoria = QPixmap(GameConstants::Resources::LUNA);
-
-        // Se re-conecta al final de la función para limpiar el mensaje
-    } else if (nivelCompletado == NivelManager::Nivel2) {
-        titulo = "¡Nivel 2 Completado!";
-        imagenVictoria = QPixmap(GameConstants::Resources::BACKGROUND); // O alguna imagen de victoria final
-
-        // Se re-conecta al final de la función para limpiar el mensaje
-    }
-
-    // --- 2. MANEJO DE IMAGEN  ---
-
-    if (imagenVictoria.isNull()) {
-        qWarning() << "ERROR: No se pudo cargar imagen de victoria para el nivel" << nivelCompletado;
-        imagenVictoria = QPixmap(scene->width(), scene->height());
-        imagenVictoria.fill(Qt::black);
-    }
-
-    QPixmap imagenEscalada = imagenVictoria.scaled(
-        scene->width(),
-        scene->height(),
-        Qt::IgnoreAspectRatio,
-        Qt::SmoothTransformation
-        );
-
-    // Mostrar la imagen como fondo.
-    QBrush brush(imagenEscalada);
-    scene->setBackgroundBrush(brush);
-    scene->update();
-
-    // --- 3. MOSTRAR TEXTO Y BOTÓN ---
-
-    // Opcional: Mostrar un mensaje como QGraphicsTextItem sobre el fondo.
-    QGraphicsTextItem *mensajeVictoria = new QGraphicsTextItem(titulo);
-    mensajeVictoria->setDefaultTextColor(Qt::yellow);
-    QFont font = mensajeVictoria->font();
-    font.setBold(true);
-    font.setPointSize(30);
-    mensajeVictoria->setFont(font);
-
-    // Centrar el texto
-    qreal textWidth = mensajeVictoria->boundingRect().width();
-    mensajeVictoria->setPos((scene->width() - textWidth) / 2, scene->height() / 4);
-    scene->addItem(mensajeVictoria);
-
-    // Mostrar botón de continuar
-    btnContinuar->setText((nivelCompletado == NivelManager::Nivel1) ? "Continuar al Nivel 2" : "Finalizar Juego");
-    btnContinuar->show();
-
-    // Re-conectar el botón 'Continuar' con la limpieza adecuada.
-    disconnect(btnContinuar, nullptr, nullptr, nullptr);
-    if (nivelCompletado == NivelManager::Nivel1) {
-        connect(btnContinuar, &QPushButton::clicked, [this, mensajeVictoria]() {
-            if (mensajeVictoria) scene->removeItem(mensajeVictoria); delete mensajeVictoria;
-            btnContinuar->hide();
-            mostrarIntroNivel(NivelManager::Nivel2);
-        });
-    } else if (nivelCompletado == NivelManager::Nivel2) {
-        connect(btnContinuar, &QPushButton::clicked, [this, mensajeVictoria]() {
-            if (mensajeVictoria) scene->removeItem(mensajeVictoria); delete mensajeVictoria;
-            onTodosLosNivelesCompletados();
-        });
-    }
-}
-
-void MainWindow::mostrarPantallaGameOver()
-{
-    // Limpiar escena de elementos de juego
-    nivelManager->limpiarNivelActual();
-
-    // Mostrar fondo de Game Over
-    QPixmap gameOver(GameConstants::Resources::GAME_OVER);
-    QGraphicsTextItem *mensajeGameOver = nullptr;
-
-    if (gameOver.isNull()) {
-        qWarning() << "ERROR: No se pudo cargar GAME_OVER. Usando fondo negro.";
-        gameOver = QPixmap(GameConstants::SCENE_WIDTH, GameConstants::SCENE_HEIGHT);
-        gameOver.fill(Qt::black);
-
-        // Si no hay imagen, mostramos un mensaje de texto.
-        mensajeGameOver = new QGraphicsTextItem("GAME OVER");
-        mensajeGameOver->setDefaultTextColor(Qt::red);
-        QFont font = mensajeGameOver->font();
-        font.setBold(true);
-        font.setPointSize(40);
-        mensajeGameOver->setFont(font);
-        qreal textWidth = mensajeGameOver->boundingRect().width();
-        mensajeGameOver->setPos((scene->width() - textWidth) / 2, scene->height() / 4);
-        scene->addItem(mensajeGameOver);
-    } else {
-        gameOver = gameOver.scaled(GameConstants::SCENE_WIDTH, GameConstants::SCENE_HEIGHT, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-    }
-
-    // Establecer el fondo (imagen o negro)
-    scene->setBackgroundBrush(QBrush(gameOver));
-    scene->update();
-
-    // El botón de Reiniciar se muestra en manejarEstadoJuego(GameOver)
-
-    // Si se usó un mensaje de texto temporal, necesitamos limpiar la escena cuando se reinicie
-    if (mensajeGameOver) {
-        // Re-conectar el botón 'Comenzar' para que limpie el mensaje al reiniciar
-        disconnect(btnComenzar, nullptr, nullptr, nullptr);
-        connect(btnComenzar, &QPushButton::clicked, [this, mensajeGameOver]() {
-            if (mensajeGameOver) scene->removeItem(mensajeGameOver); delete mensajeGameOver;
-            btnComenzar->hide();
-            gameManager->reiniciarJuego();
-            mostrarIntroNivel(NivelManager::Nivel1);
-        });
-    }
-}
-
-void MainWindow::actualizarFondo()
-{
-    desplazamientoY += velocidadFondo;
-
-    if (desplazamientoY >= GameConstants::SCENE_HEIGHT) {
-        desplazamientoY = 0;
-    }
-
-    QBrush brush(fondoEscalado);
-    brush.setTransform(QTransform::fromTranslate(0, desplazamientoY));
-    scene->setBackgroundBrush(brush);
-}
-
-void MainWindow::actualizarHUD()
-{
-    if (!nivelManager->getNivelActual()) return;
-
-    Nave *nave = nivelManager->getNivelActual()->getNave();
-    if (!nave) return;
-
-    int vidasActuales = nave->getVidas();
-
-    // Actualizar visibilidad de corazones
-    for (int i = 0; i < corazones.size(); i++) {
-        corazones[i]->setVisible(i < vidasActuales);
-    }
-
-    // El Game Over por vidas se gestiona en el Nivel, que emite nivelFallado.
-    // Esta verificación es redundante si el Nivel lo hace, pero la mantenemos como fallback.
-    if (vidasActuales <= 0 && gameManager->getEstado() == GameManager::Playing) {
-        // Usamos nivelManager->pausarNivel() aquí para detener los timers del nivel
-        // antes de que el GameManager cambie el estado.
-        nivelManager->pausarNivel();
-        gameManager->terminarJuego(); // Esto activa manejarEstadoJuego(GameOver)
-    }
-}
-
-void MainWindow::mostrarElementosJuego(bool mostrar)
-{
-    if (textoVidas) textoVidas->setVisible(mostrar);
-
-    for (auto corazon : corazones) {
-        corazon->setVisible(false); // Se actualizarán en actualizarHUD
-    }
-
-    // Asegurar que los labels del Nivel 2 se oculten si no estamos en ese nivel o jugando
-    if (!mostrar && nivelManager->getNivelActualID() == NivelManager::Nivel2) {
-        Nivel2 *nivel2 = dynamic_cast<Nivel2*>(nivelManager->getNivelActual());
-        if (nivel2 && nivel2->getLabelGemas()) {
-            nivel2->getLabelGemas()->hide();
-        }
-    }
-}
-
-void MainWindow::limpiarEscena()
-{
-    // Limpia elementos de la escena que no pertenecen a un nivel específico
-    // (Actualización: Esta función ahora se usa para limpiar cualquier mensaje temporal
-    // cuando se vuelve al menú principal)
-}
 void MainWindow::mostrarIntroNivel(NivelManager::NivelID nivelID)
 {
     qDebug() << "Mostrando intro del Nivel" << nivelID;
@@ -539,9 +586,8 @@ void MainWindow::mostrarIntroNivel(NivelManager::NivelID nivelID)
 
     // Ocultar elementos del HUD
     mostrarElementosJuego(false);
-    btnContinuar->hide(); // Ocultar si estuviera visible
 
-    // Ocultar botones del menú/gameover
+    // Ocultar botones del menú
     btnComenzar->hide();
     btnOpciones->hide();
 
@@ -550,7 +596,7 @@ void MainWindow::mostrarIntroNivel(NivelManager::NivelID nivelID)
     if (nivelID == NivelManager::Nivel1) {
         rutaIntro = GameConstants::Resources::NIVEL1_INTRO;
     } else if (nivelID == NivelManager::Nivel2) {
-        rutaIntro = GameConstants::Resources::NIVEL2_INTRO; // <- Asegura que esta ruta esté correcta en constants.h
+        rutaIntro = GameConstants::Resources::NIVEL2_INTRO;
     }
 
     QPixmap intro(rutaIntro);
@@ -599,4 +645,128 @@ void MainWindow::iniciarNivelDespuesDeIntro(NivelManager::NivelID nivelID)
     nivelManager->cargarNivel(nivelID);
 
     scene->update();
+}
+
+void MainWindow::mostrarPantallaVictoria(NivelManager::NivelID nivelCompletado)
+{
+    if (nivelCompletado == NivelManager::Nivel1) {
+        qDebug() << "¡Nivel 1 completado! Mostrando la Luna...";
+
+        // Detener el fondo scrolleable
+        timerFondo->stop();
+
+        // Ocultar elementos del HUD
+        mostrarElementosJuego(false);
+
+        // Cargar imagen de la Luna
+        QPixmap luna(GameConstants::Resources::LUNA);
+        if (luna.isNull()) {
+            qDebug() << "ERROR: No se pudo cargar la imagen de la Luna";
+            // Continuar sin imagen
+        } else {
+            QPixmap lunaEscalada = luna.scaled(
+                scene->width(),
+                scene->height(),
+                Qt::IgnoreAspectRatio,
+                Qt::SmoothTransformation
+                );
+
+            QBrush brush(lunaEscalada);
+            scene->setBackgroundBrush(brush);
+            scene->update();
+        }
+
+        // Configurar timer para mostrar mensaje y cargar Nivel 2
+        disconnect(timerTransicion, nullptr, nullptr, nullptr);
+        connect(timerTransicion, &QTimer::timeout, [this]() {
+            QMessageBox::information(
+                this,
+                "¡Nivel 1 Completado!",
+                "¡Has llegado a la Luna! 🌕\n\nAhora viene el Nivel 2:\n"
+                "Recolecta 5 gemas mientras esquivas meteoritos."
+                );
+
+            // Mostrar intro del Nivel 2
+            mostrarIntroNivel(NivelManager::Nivel2);
+        });
+
+        timerTransicion->start(GameConstants::TIEMPO_PANTALLA_VICTORIA);
+
+    } else if (nivelCompletado == NivelManager::Nivel2) {
+        qDebug() << "¡Nivel 2 completado!";
+
+        QMessageBox::information(
+            this,
+            "¡Nivel 2 Completado!",
+            "¡Has recolectado todas las gemas! 💎\n\n"
+            "¡Felicidades, explorador espacial!"
+            );
+
+        // Terminar el juego
+        onTodosLosNivelesCompletados();
+    }
+}
+
+void MainWindow::mostrarPantallaGameOver()
+{
+    timerFondo->stop();
+
+    // Reproducir sonido de Game Over
+    playGameOverSound();
+
+    QMessageBox::information(
+        this,
+        "Fin del juego",
+        "¡Has perdido todas las vidas!\n\nLa misión ha fallado. 💥"
+        );
+
+    qApp->quit();
+}
+
+void MainWindow::actualizarFondo()
+{
+    desplazamientoY += velocidadFondo;
+
+    if (desplazamientoY >= GameConstants::SCENE_HEIGHT) {
+        desplazamientoY = 0;
+    }
+
+    QBrush brush(fondoEscalado);
+    brush.setTransform(QTransform::fromTranslate(0, desplazamientoY));
+    scene->setBackgroundBrush(brush);
+}
+
+void MainWindow::actualizarHUD()
+{
+    if (!nivelManager->getNivelActual()) return;
+
+    Nave *nave = nivelManager->getNivelActual()->getNave();
+    if (!nave) return;
+
+    int vidasActuales = nave->getVidas();
+
+    // Actualizar visibilidad de corazones
+    for (int i = 0; i < corazones.size(); i++) {
+        corazones[i]->setVisible(i < vidasActuales);
+    }
+
+    // Verificar game over
+    if (vidasActuales <= 0) {
+        gameManager->terminarJuego();
+    }
+}
+
+void MainWindow::mostrarElementosJuego(bool mostrar)
+{
+    if (textoVidas) textoVidas->setVisible(mostrar);
+
+    for (auto corazon : corazones) {
+        corazon->setVisible(false); // Se actualizarán en actualizarHUD
+    }
+}
+
+void MainWindow::limpiarEscena()
+{
+    // El NivelManager ya limpia sus propios elementos
+    // Aquí solo limpiamos elementos globales si es necesario
 }

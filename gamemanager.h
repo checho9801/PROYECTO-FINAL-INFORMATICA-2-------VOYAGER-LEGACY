@@ -62,6 +62,12 @@ public:
      */
     void reiniciarJuego();
 
+    /**
+     * @brief Cambia el estado del juego
+     * @param nuevoEstado Nuevo estado
+     */
+    void cambiarEstado(GameState nuevoEstado);
+
     // Getters
     GameState getEstado() const { return estado; }
     int getPuntuacion() const { return puntuacion; }
@@ -120,11 +126,7 @@ private:
     int dificultad;               ///< Nivel de dificultad actual
     QTimer *timerTiempo;          ///< Timer para contar tiempo
 
-    /**
-     * @brief Cambia el estado del juego
-     * @param nuevoEstado Nuevo estado
-     */
-    void cambiarEstado(GameState nuevoEstado);
+
 };
 
 #endif // GAMEMANAGER_H

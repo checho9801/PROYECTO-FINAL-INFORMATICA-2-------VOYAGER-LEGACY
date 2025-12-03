@@ -11,7 +11,7 @@ NivelBase::NivelBase(QGraphicsScene *escena, QObject *parent)
 {
 }
 
-// 1. **ERROR RESUELTO AQUÍ:** El destructor debe llamar a la versión base de limpiar().
+// 1. **:** El destructor debe llamar a la versión base de limpiar().
 // Dado que limpiar() es virtual pura, debe tener una definición aquí.
 // Pero como las clases derivadas hacen la limpieza real, la implementación base
 // puede ser vacía o limitarse a llamar a 'limpiar()'.
