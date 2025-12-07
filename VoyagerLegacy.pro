@@ -9,28 +9,40 @@ CONFIG += c++17
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
+    bala.cpp \
+    balaenemiga.cpp \
+    barraVida.cpp \
     collisionmanager.cpp \
+    enemigo.cpp \
     gamemanager.cpp \
     gema.cpp \
     main.cpp \
     mainwindow.cpp \
     meteorito.cpp \
     nave.cpp \
+    naveN3.cpp \
     nivel1.cpp \
     nivel2.cpp \
+    nivel3.cpp \
     nivelbase.cpp \
     nivelmanager.cpp
 
 HEADERS += \
+    bala.h \
+    balaenemiga.h \
+    barraVida.h \
     collisionmanager.h \
     constants.h \
+    enemigo.h \
     gamemanager.h \
     gema.h \
     mainwindow.h \
     meteorito.h \
     nave.h \
+    naveN3.h \
     nivel1.h \
     nivel2.h \
+    nivel3.h \
     nivelbase.h \
     nivelmanager.h
 

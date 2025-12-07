@@ -5,6 +5,9 @@
 #include "gamemanager.h"
 #include "nivelmanager.h"
 #include "nivel2.h"
+#include "naveN3.h"
+#include "nivel2.h"
+#include "nivel3.h"
 #include <QMainWindow>
 #include <QGraphicsScene>
 #include <QTimer>
@@ -43,8 +46,9 @@ private slots:
     void manejarEstadoJuego(GameManager::GameState nuevoEstado);
 
     // Slots del NivelManager
+public slots:
     void onNivelCargado(NivelManager::NivelID nivelID);
-    void onNivelCompletado(NivelManager::NivelID nivelID);
+    void onNivelCompletado(NivelManager::NivelID nivelCompletado);
     void onNivelFallado(NivelManager::NivelID nivelID);
     void onTodosLosNivelesCompletados();
 
@@ -60,9 +64,15 @@ private slots:
     void playColisionSound();
     void playGemaSound();
 
+    //slots nivel 3
+    void playMusicaNivel3();
+
+
 private:
     // UI generada desde el archivo .ui
     Ui::MainWindow *ui;
+    NaveN3 *naveN3Nivel3;
+    QTimer *timerNivel3;
 
     // Managers
     GameManager *gameManager;       ///< Gestor del estado general del juego
@@ -86,10 +96,17 @@ private:
     QPushButton *btnComenzar;
     QPushButton *btnOpciones;
 
-    // Sistema de audio (NUEVO)
+    // Sistema de audio
     QSoundEffect *musicaMenu;
-    QSoundEffect *musicaNivel1;
-    QSoundEffect *musicaNivel2;
+    QMediaPlayer *musicaNivel1;
+    QMediaPlayer *musicaNivel2;
+    QMediaPlayer *musicaNivel3;
+
+    QAudioOutput *audioOutputNivel3 = nullptr;
+    QAudioOutput *audioOutputNivel2 = nullptr;
+    QAudioOutput *audioOutputNivel1 = nullptr;
+
+    //efectos
     QSoundEffect *sfxColision;
     QSoundEffect *sfxGema;
     QSoundEffect *sfxVictoria;

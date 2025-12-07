@@ -5,6 +5,7 @@
 #include "gema.h"
 #include "collisionmanager.h"
 #include "nivelbase.h"
+#include "nivelmanager.h"
 #include <QBrush>
 #include <QTransform>
 #include <QMessageBox>
@@ -236,10 +237,29 @@ void MainWindow::inicializarSonidos()
         }
     };
 
-    // Inicializar música
-    initMusic(musicaMenu, GameConstants::Resources::MUSICA_MENU);
-    initMusic(musicaNivel1, GameConstants::Resources::MUSICA_NIVEL1);
-    initMusic(musicaNivel2, GameConstants::Resources::MUSICA_NIVEL2);
+    // ✅ QMediaPlayer PARA MÚSICA (MP3):
+    musicaNivel1 = new QMediaPlayer(this);
+    audioOutputNivel1 = new QAudioOutput(this);
+    musicaNivel1->setAudioOutput(audioOutputNivel1);
+    audioOutputNivel1->setVolume(0.5);
+    musicaNivel1->setSource(QUrl("qrc:/new/audios/sounds/nivel1.mp3"));
+    musicaNivel1->setLoops(QMediaPlayer::Infinite);
+
+    musicaNivel2 = new QMediaPlayer(this);
+    audioOutputNivel2 = new QAudioOutput(this);
+    musicaNivel2->setAudioOutput(audioOutputNivel2);
+    audioOutputNivel2->setVolume(0.5);
+    musicaNivel2->setSource(QUrl("qrc:/new/audios/sounds/nivel2.mp3"));
+    musicaNivel2->setLoops(QMediaPlayer::Infinite);
+
+    musicaNivel3 = new QMediaPlayer(this);  // ✅ NIVEL3
+    audioOutputNivel3 = new QAudioOutput(this);
+    musicaNivel3->setAudioOutput(audioOutputNivel3);
+    audioOutputNivel3->setVolume(0.5);
+    musicaNivel3->setSource(QUrl("qrc:/new/audios/sounds/fondoN3.mp3"));
+    musicaNivel3->setLoops(QMediaPlayer::Infinite);
+
+    qDebug() << "✅ QMediaPlayer inicializado para 3 pistas MP3";
 
     // Lambda para inicializar efectos de sonido
     auto initSfx = [this, &copyResourceToTemp](QSoundEffect*& effect, const char* resourcePath) {
@@ -274,6 +294,7 @@ void MainWindow::stopAllMusic()
     if (musicaMenu && musicaMenu->isPlaying()) musicaMenu->stop();
     if (musicaNivel1 && musicaNivel1->isPlaying()) musicaNivel1->stop();
     if (musicaNivel2 && musicaNivel2->isPlaying()) musicaNivel2->stop();
+    if (musicaNivel3) musicaNivel3->stop();
 }
 
 void MainWindow::playMusicaMenu()
@@ -288,7 +309,7 @@ void MainWindow::playMusicaMenu()
 void MainWindow::playMusicaNivel1()
 {
     stopAllMusic();
-    if (musicaNivel1 && musicaNivel1->status() == QSoundEffect::Ready) {
+    if (musicaNivel1 && musicaNivel1->playbackState() != QMediaPlayer::PlayingState) {
         musicaNivel1->play();
         qDebug() << "Reproduciendo música del Nivel 1";
     }
@@ -297,10 +318,19 @@ void MainWindow::playMusicaNivel1()
 void MainWindow::playMusicaNivel2()
 {
     stopAllMusic();
-    if (musicaNivel2 && musicaNivel2->status() == QSoundEffect::Ready) {
+    if (musicaNivel2 && musicaNivel2->playbackState() != QMediaPlayer::PlayingState) {
         musicaNivel2->play();
         qDebug() << "Reproduciendo música del Nivel 2";
     }
+}
+
+void MainWindow::playMusicaNivel3()
+{
+    stopAllMusic();
+    if(musicaNivel3 && musicaNivel3->playbackState() != QMediaPlayer::PlayingState){
+        musicaNivel3->play();
+    }
+    qDebug() << "Reproduciendo música del Nivel 3";
 }
 
 void MainWindow::playColisionSound()
@@ -369,7 +399,7 @@ void MainWindow::setupMenu()
     // Conectar botón al inicio del juego
     connect(btnComenzar, &QPushButton::clicked, [this]() {
         gameManager->iniciarJuego();
-        mostrarIntroNivel(NivelManager::Nivel1);
+        mostrarIntroNivel(NivelManager::NivelID::Nivel1);
     });
 
     btnComenzar->hide();
@@ -493,16 +523,15 @@ void MainWindow::manejarEstadoJuego(GameManager::GameState nuevoEstado)
 
 void MainWindow::onNivelCargado(NivelManager::NivelID nivelID)
 {
-    qDebug() << "MainWindow: Nivel" << nivelID << "cargado";
-    setWindowTitle(QString("Voyager Legacy - Nivel %1").arg(nivelID));
+    qDebug() << "MainWindow: Nivel" << static_cast<int>(nivelID) << "cargado";
+    setWindowTitle(QString("Voyager Legacy - Nivel %1").arg(static_cast<int>(nivelID)));
 
-    // Reproducir música del nivel correspondiente
-    if (nivelID == NivelManager::Nivel1) {
+    // Reproducir música
+    if (nivelID == NivelManager::NivelID::Nivel1) {
         playMusicaNivel1();
-    } else if (nivelID == NivelManager::Nivel2) {
+    } else if (nivelID == NivelManager::NivelID::Nivel2) {
         playMusicaNivel2();
-
-        // Si es el Nivel 2, configurar el label de gemas
+        // Label gemas
         Nivel2 *nivel2 = dynamic_cast<Nivel2*>(nivelManager->getNivelActual());
         if (nivel2 && nivel2->getLabelGemas()) {
             QLabel *labelGemas = nivel2->getLabelGemas();
@@ -510,40 +539,39 @@ void MainWindow::onNivelCargado(NivelManager::NivelID nivelID)
             labelGemas->move(GameConstants::SCENE_WIDTH - 200, GameConstants::HUD_MARGIN_Y);
             labelGemas->show();
         }
-    }
 
-    // Conectar sonidos de colisiones y gemas
-    NivelBase *nivelActual = nivelManager->getNivelActual();
-    if (!nivelActual) return;
-
-    // Conectar sonido de colisión con la nave
-       if (nivelActual && nivelActual->getNave()) {
-        Nave *nave = nivelActual->getNave();
-        connect(nave, &Nave::colisionConMeteorito, this, &MainWindow::playColisionSound, Qt::UniqueConnection);
-    }
-
-    // Para el Nivel 2, conectar sonido de gemas
-    if (nivelID == NivelManager::Nivel2) {
-        Nivel2 *nivel2 = dynamic_cast<Nivel2*>(nivelActual);
+        // ✅ SFX GEMA - Qt::AutoConnection
         if (nivel2) {
-            connect(nivel2, &Nivel2::gemaRecolectadaSignal, this, &MainWindow::playGemaSound, Qt::UniqueConnection);
+            connect(nivel2, &Nivel2::gemaRecolectadaSignal,
+                    this, &MainWindow::playGemaSound, Qt::AutoConnection);
         }
-    }
+    } else if (nivelID == NivelManager::NivelID::Nivel3) {  // ✅ MISMO NIVEL
+        playMusicaNivel3();
+    }  // ✅ CIERRE CORRECTO
+
+    // Conectar sonidos ✅ Qt::AutoConnection
+    NivelBase *nivelActual = nivelManager->getNivelActual();
+    if (!nivelActual || !nivelActual->getNave()) return;
+
+    Nave *nave = nivelActual->getNave();
+    connect(nave, &Nave::colisionConMeteorito,
+            this, &MainWindow::playColisionSound, Qt::AutoConnection);  // ✅ SFX FUNCIONA
 }
+
 
 void MainWindow::onNivelCompletado(NivelManager::NivelID nivelCompletado)
 {
-    qDebug() << "MainWindow: Nivel" << nivelCompletado << "completado";
+    qDebug() << "MainWindow: Nivel" << static_cast<int>(nivelCompletado) << "completado";  // ✅ CAST
 
     // Reproducir sonido de victoria
     playVictorySound();
 
-    mostrarPantallaVictoria(nivelCompletado);
+    mostrarPantallaVictoria(nivelCompletado);  // ✅ NivelManager maneja siguiente nivel
 }
 
 void MainWindow::onNivelFallado(NivelManager::NivelID nivelID)
 {
-    qDebug() << "MainWindow: Nivel" << nivelID << "fallado - Activando Game Over";
+    qDebug() << "MainWindow: Nivel" << static_cast<int>(nivelID) << "fallado - Activando Game Over";
 
     // Detener el nivel completamente
     nivelManager->pausarNivel();
@@ -563,23 +591,39 @@ void MainWindow::onNivelFallado(NivelManager::NivelID nivelID)
     mostrarPantallaGameOver();
 }
 
+
 void MainWindow::onTodosLosNivelesCompletados()
 {
-    qDebug() << "¡Todos los niveles completados!";
+    qDebug() << "🎉 VICTORIA TOTAL - VOLVIENDO AL MENÚ";
 
-    QMessageBox::information(
-        this,
-        "¡VICTORIA TOTAL!",
-        "¡Felicidades!\n\nHas completado todos los niveles de Voyager Legacy.\n\n"
-        "¡Eres un verdadero explorador espacial! 🚀🌟"
-        );
+    // Parar TODO
+    timerFondo->stop();
+    if (nivelManager) nivelManager->pausarNivel();
 
-    qApp->quit();
+    // Pantalla victoria ÉPICA
+    QPixmap fondoVictoria(GameConstants::Resources::BACKGROUND);
+    if (!fondoVictoria.isNull()) {
+        fondoVictoria = fondoVictoria.scaled(scene->width(), scene->height());
+        scene->setBackgroundBrush(fondoVictoria);
+    }
+
+    // Mensaje + VOLVER AL MENÚ
+    QMessageBox::information(this, "🚀 ¡VICTORIA TOTAL! 🌟",
+                             "🎉 ¡FELICIDADES EXPLORADOR ESPACIAL! 🎉\n\n"
+                             "★ Derrotaste al jefe final 👾\n"
+                             "★ 5 gemas recolectadas 💎\n"
+                             "★ Luna conquistada 🌕\n\n"
+                             "¡PRESIONA OK para jugar de nuevo!");
+
+    // ✅ VOLVER AL MENÚ SIN CRASH
+    gameManager->reiniciarJuego();
+    // NO qApp->quit(); ← ESTO CAUSABA CRASH
 }
+
 
 void MainWindow::mostrarIntroNivel(NivelManager::NivelID nivelID)
 {
-    qDebug() << "Mostrando intro del Nivel" << nivelID;
+    qDebug() << "Mostrando intro del Nivel"<< static_cast<int>(nivelID);
 
     // Detener el fondo scrolleable
     timerFondo->stop();
@@ -593,9 +637,9 @@ void MainWindow::mostrarIntroNivel(NivelManager::NivelID nivelID)
 
     // Cargar la imagen de intro correspondiente
     QString rutaIntro;
-    if (nivelID == NivelManager::Nivel1) {
+    if (nivelID == NivelManager::NivelID::Nivel1) {
         rutaIntro = GameConstants::Resources::NIVEL1_INTRO;
-    } else if (nivelID == NivelManager::Nivel2) {
+    } else if (nivelID == NivelManager::NivelID::Nivel2) {
         rutaIntro = GameConstants::Resources::NIVEL2_INTRO;
     }
 
@@ -630,7 +674,7 @@ void MainWindow::mostrarIntroNivel(NivelManager::NivelID nivelID)
 
 void MainWindow::iniciarNivelDespuesDeIntro(NivelManager::NivelID nivelID)
 {
-    qDebug() << "Iniciando Nivel" << nivelID << "después de intro";
+    qDebug() << "Iniciando Nivel" << static_cast<int>(nivelID) << "después de intro";
 
     // Restaurar el fondo scrolleable
     timerFondo->start(GameConstants::FRAME_UPDATE_MS);
@@ -649,61 +693,76 @@ void MainWindow::iniciarNivelDespuesDeIntro(NivelManager::NivelID nivelID)
 
 void MainWindow::mostrarPantallaVictoria(NivelManager::NivelID nivelCompletado)
 {
-    if (nivelCompletado == NivelManager::Nivel1) {
+    qDebug() << "Mostrando victoria para Nivel" << static_cast<int>(nivelCompletado);
+
+    // Detener fondo y HUD
+    timerFondo->stop();
+    mostrarElementosJuego(false);
+
+    if (nivelCompletado == NivelManager::NivelID::Nivel1) {
         qDebug() << "¡Nivel 1 completado! Mostrando la Luna...";
 
-        // Detener el fondo scrolleable
-        timerFondo->stop();
-
-        // Ocultar elementos del HUD
-        mostrarElementosJuego(false);
-
-        // Cargar imagen de la Luna
         QPixmap luna(GameConstants::Resources::LUNA);
-        if (luna.isNull()) {
-            qDebug() << "ERROR: No se pudo cargar la imagen de la Luna";
-            // Continuar sin imagen
-        } else {
-            QPixmap lunaEscalada = luna.scaled(
-                scene->width(),
-                scene->height(),
-                Qt::IgnoreAspectRatio,
-                Qt::SmoothTransformation
-                );
-
-            QBrush brush(lunaEscalada);
-            scene->setBackgroundBrush(brush);
+        if (!luna.isNull()) {
+            luna = luna.scaled(scene->width(), scene->height(),
+                               Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+            scene->setBackgroundBrush(luna);
             scene->update();
         }
 
-        // Configurar timer para mostrar mensaje y cargar Nivel 2
         disconnect(timerTransicion, nullptr, nullptr, nullptr);
         connect(timerTransicion, &QTimer::timeout, [this]() {
-            QMessageBox::information(
-                this,
-                "¡Nivel 1 Completado!",
-                "¡Has llegado a la Luna! 🌕\n\nAhora viene el Nivel 2:\n"
-                "Recolecta 5 gemas mientras esquivas meteoritos."
-                );
-
-            // Mostrar intro del Nivel 2
-            mostrarIntroNivel(NivelManager::Nivel2);
+            QMessageBox::information(this, "¡Nivel 1 Completado!",
+                                     "¡Has llegado a la Luna! 🌕\n\nAhora viene el Nivel 2:\n"
+                                     "Recolecta 5 gemas mientras esquivas meteoritos.");
+            mostrarIntroNivel(NivelManager::NivelID::Nivel2);
         });
-
         timerTransicion->start(GameConstants::TIEMPO_PANTALLA_VICTORIA);
 
-    } else if (nivelCompletado == NivelManager::Nivel2) {
-        qDebug() << "¡Nivel 2 completado!";
+    } else if (nivelCompletado == NivelManager::NivelID::Nivel2) {
+        qDebug() << "¡Nivel 2 completado! Mostrando galaxia...";
 
-        QMessageBox::information(
-            this,
-            "¡Nivel 2 Completado!",
-            "¡Has recolectado todas las gemas! 💎\n\n"
-            "¡Felicidades, explorador espacial!"
-            );
+        QPixmap galaxia(GameConstants::Resources::GALAXIA);
+        if (!galaxia.isNull()) {
+            galaxia = galaxia.scaled(scene->width(), scene->height(),
+                                     Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+            scene->setBackgroundBrush(galaxia);
+            scene->update();
+        }
 
-        // Terminar el juego
-        onTodosLosNivelesCompletados();
+        disconnect(timerTransicion, nullptr, nullptr, nullptr);
+        connect(timerTransicion, &QTimer::timeout, [this]() {
+            QMessageBox::information(this, "¡Nivel 2 Completado!",
+                                     "¡Has recolectado todas las gemas! 💎\n\n"
+                                     "¡Ahora el NIVEL 3: Derrota al jefe final! 👾");
+            mostrarIntroNivel(NivelManager::NivelID::Nivel3);
+        });
+        timerTransicion->start(GameConstants::TIEMPO_PANTALLA_VICTORIA);
+
+    }else if (nivelCompletado == NivelManager::NivelID::Nivel3) {
+        qDebug() << "🎉 ¡NIVEL 3 COMPLETADO - VICTORIA TOTAL!";
+
+        // Fondo victoria
+        scene->setBackgroundBrush(QBrush(QPixmap(GameConstants::Resources::BACKGROUND)
+                                             .scaled(scene->width(), scene->height())));
+        scene->update();
+
+        disconnect(timerTransicion, nullptr, nullptr, nullptr);
+        connect(timerTransicion, &QTimer::timeout, [this]() {
+            QMessageBox::information(this, "🚀 ¡VICTORIA TOTAL! 🌟",
+                                     "🎉 ¡FELICIDADES EXPLORADOR ESPACIAL! 🎉\n\n"
+                                     "★ Has derrotado al jefe final 👾\n"
+                                     "★ Recolectaste todas las gemas 💎\n"
+                                     "★ Conquistaste la Luna 🌕\n\n"
+                                     "¡VOLVIENDO AL MENÚ PRINCIPAL!");
+
+            // ✅ VOLVER AL MENÚ SIN CRASH
+            gameManager->cambiarEstado(GameManager::Menu);
+        });
+        timerTransicion->start(2000);
+    } else {
+        qDebug() << "Nivel desconocido:" << static_cast<int>(nivelCompletado);
+        gameManager->reiniciarJuego();
     }
 }
 

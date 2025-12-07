@@ -18,7 +18,7 @@ constexpr int FRAME_UPDATE_MS = 16;         // ~60 FPS update interval
 constexpr int METEORITO_SPAWN_MS = 2000;    // Cada 2 segundos
 constexpr int METEORITO_MOVE_MS = 50;       // Actualizar posicion cada 50ms
 constexpr int ACCELERATION_MS = 7000;       // Acelerar spawn cada 7 segundos
-constexpr int GOAL_TIME_MS = 60000;         // Meta a los 60 segundos
+constexpr int GOAL_TIME_MS = 30000;         // Meta a los 30 segundos
 constexpr int TIEMPO_INTRO_NIVEL = 3000;
 constexpr int TIEMPO_PANTALLA_VICTORIA = 3000;
 
@@ -51,6 +51,8 @@ constexpr const char* GEMA = ":/new/imagen/images/gema.png";
 constexpr const char* NIVEL1_INTRO = ":/new/imagen/images/nivel1.png";
 constexpr const char* NIVEL2_INTRO = ":/new/imagen/images/nivel2.png";
 constexpr const char* GAME_OVER = ":/new/imagen/images/gameover.png";
+constexpr const char* NIVEL3_FONDO = ":/new/imagen/images/fo.png";
+constexpr const char* GALAXIA = ":/new/imagen/images/galaxia.png";
 
 //SONIDOS
 

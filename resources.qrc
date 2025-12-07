@@ -10,6 +10,11 @@
         <file>images/nivel2.png</file>
         <file>images/nivel1.png</file>
         <file>images/gameover.png</file>
+        <file>images/fo.png</file>
+        <file>images/NaveEnemiga.png</file>
+        <file>images/PA.png</file>
+        <file>images/PE.png</file>
+        <file>images/galaxia.png</file>
     </qresource>
     <qresource prefix="/new/audios">
         <file>sounds/gema.wav</file>
@@ -19,5 +24,8 @@
         <file>sounds/menu.mp3</file>
         <file>sounds/nivel1.mp3</file>
         <file>sounds/nivel2.mp3</file>
+        <file>sounds/danio.mp3</file>
+        <file>sounds/fondoN3.mp3</file>
+        <file>sounds/laser.mp3</file>
     </qresource>
 </RCC>

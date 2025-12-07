@@ -1,14 +1,13 @@
 #include "nivelmanager.h"
 #include "nivel1.h"
 #include "nivel2.h"
+#include "nivel3.h"
 #include <QDebug>
 
 NivelManager::NivelManager(QGraphicsScene *escena, QObject *parent)
-    : QObject(parent),
-    scene(escena),
-    nivelActual(nullptr),
-    nivelActualID(Ninguno)
+    : QObject(parent), scene(escena), nivelActual(nullptr), nivelActualID(NivelID::Ninguno)
 {
+    qDebug() << "✅ NivelManager inicializado";
 }
 
 NivelManager::~NivelManager()
@@ -16,106 +15,98 @@ NivelManager::~NivelManager()
     limpiarNivelActual();
 }
 
-bool NivelManager::cargarNivel(NivelID nivelID)
+NivelBase* NivelManager::getNivelActual()
 {
-    qDebug() << "=== CARGANDO NIVEL" << nivelID << "===";
+    return nivelActual;
+}
 
-    // Limpiar nivel anterior
+void NivelManager::onNivelCompletado()
+{
+    qDebug() << "NivelManager: Nivel" << static_cast<int>(nivelActualID) << "completado";
+
+    // ✅ NO tocar nivelActual aquí
+    emit nivelCompletado(nivelActualID);
+}
+
+
+void NivelManager::onNivelFallado()
+{
+    qDebug() << "Nivel" << static_cast<int>(nivelActualID) << "fallado";
+    emit nivelFallado(nivelActualID);
+}
+
+void NivelManager::cargarNivel(NivelID nivelID)
+{
     limpiarNivelActual();
 
-    // Crear nuevo nivel
-    nivelActual = crearNivel(nivelID);
-
-    if (!nivelActual) {
-        qWarning() << "ERROR: No se pudo crear el nivel" << nivelID;
-        return false;
+    switch (nivelID) {
+    case NivelID::Nivel1: nivelActual = new Nivel1(scene, this); break;
+    case NivelID::Nivel2: nivelActual = new Nivel2(scene, this); break;
+    case NivelID::Nivel3: nivelActual = new Nivel3(scene, this); break;
     }
 
-    nivelActualID = nivelID;
-
-    // Conectar señales del nivel
+    // ✅ TIPOS COINCIDEN: void() → void()
     connect(nivelActual, &NivelBase::nivelCompletado, this, &NivelManager::onNivelCompletado);
     connect(nivelActual, &NivelBase::nivelFallado, this, &NivelManager::onNivelFallado);
 
-    // Iniciar el nivel
+    nivelActualID = nivelID;
     nivelActual->iniciar();
-
     emit nivelCargado(nivelID);
-    return true;
+}
+
+
+NivelBase* NivelManager::crearNivel(NivelManager::NivelID nivelID)
+{
+    switch (nivelID) {
+    case NivelID::Nivel1:
+        return new Nivel1(scene, this);
+    case NivelID::Nivel2:
+        return new Nivel2(scene, this);
+    case NivelID::Nivel3:
+        return new Nivel3(scene, this);
+    default:
+        qWarning() << "❌ Nivel desconocido:" << static_cast<int>(nivelID);
+        return nullptr;
+    }
 }
 
 void NivelManager::pausarNivel()
 {
-    if (nivelActual) {
-        nivelActual->pausar();
-    }
+    if (nivelActual) nivelActual->pausar();
 }
 
 void NivelManager::reanudarNivel()
 {
-    if (nivelActual) {
-        nivelActual->reanudar();
-    }
+    if (nivelActual) nivelActual->reanudar();
 }
 
 bool NivelManager::haySiguienteNivel() const
 {
-    // Verificar si existe un nivel después del actual
-    return nivelActualID < NivelFinal;
+    return nivelActualID < NivelID::Nivel3;
 }
 
 bool NivelManager::cargarSiguienteNivel()
 {
     if (!haySiguienteNivel()) {
-        qDebug() << "No hay más niveles disponibles";
+        qDebug() << "🏆 No hay más niveles - VICTORIA TOTAL!";
         emit todosLosNivelesCompletados();
         return false;
     }
 
-    NivelID siguienteID = static_cast<NivelID>(nivelActualID + 1);
-    return cargarNivel(siguienteID);
+    NivelID siguiente = static_cast<NivelID>(static_cast<int>(nivelActualID) + 1);
+    qDebug() << "Cargando siguiente nivel:" << static_cast<int>(siguiente);
+    cargarNivel(siguiente);
+    return true;
 }
 
-void NivelManager::onNivelCompletado()
-{
-    qDebug() << "Nivel" << nivelActualID << "completado";
-    emit nivelCompletado(nivelActualID);
-}
-
-void NivelManager::onNivelFallado()
-{
-    qDebug() << "Nivel" << nivelActualID << "fallado";
-    emit nivelFallado(nivelActualID);
-}
 
 void NivelManager::limpiarNivelActual()
 {
     if (nivelActual) {
         nivelActual->detener();
         nivelActual->limpiar();
-        nivelActual->deleteLater();
+        delete nivelActual;
         nivelActual = nullptr;
     }
-
-    nivelActualID = Ninguno;
-}
-
-NivelBase* NivelManager::crearNivel(NivelID nivelID)
-{
-    switch (nivelID) {
-    case Nivel1:
-        return new ::Nivel1(scene, this);
-
-    case Nivel2:
-        return new ::Nivel2(scene, this);
-
-    case NivelFinal:
-        // Por ahora no existe, pero puedes agregarlo después
-        qWarning() << "Nivel Final no implementado aún";
-        return nullptr;
-
-    default:
-        qWarning() << "Nivel desconocido:" << nivelID;
-        return nullptr;
-    }
+    nivelActualID = NivelID::Ninguno;
 }
